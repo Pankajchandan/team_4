@@ -74,7 +74,7 @@ def donate_item():
 
 @app.route('/driver_see_pickups', methods=['POST','OPTIONS'])
 def driver_see_pickups():
-    pretty_print_POST(request)
+    #pretty_print_POST(request)
     if not request.json:
         return 'OK'
     print request.json
@@ -89,14 +89,15 @@ def driver_see_pickups():
     doner_addr = set()
     for res in result:
         doner_addr.add((res[6],res[2]))
-    print doner_addr
+    #log.info("doner_addresses: {}".format(doner_addr))
     for add in doner_addr:
         lat = add[0].split(',')[0]
         lng = add[0].split(',')[1]
-        log.info("lat: {}, long: {}".format(lat, lng))
-        log.info("bounds: {},{},{},{}".format(lat_bound_low, lat_bound_high,lng_bound_low, lng_bound_high))
         if lat_bound_low <= float(lat) <= lat_bound_high and lng_bound_low <= float(lng) <= lng_bound_high:
+            log.info("nearby doner lat: {}, long: {}".format(lat, lng))
+            log.info("bounds: {},{},{},{}".format(lat_bound_low, lat_bound_high,lng_bound_low, lng_bound_high))
             statement = "select name, address, phone from users_hack where id='{}'".format(res[2])
+            log.info("fetch statement: {}".format(statement))
             doner_info= db_fetch(statement)
             resp['coord_{}'.format(counter)] = {}
             resp['coord_{}'.format(counter)]['d_id'] = res[2]
