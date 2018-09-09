@@ -47,3 +47,4 @@ Body:</br>
 ### Deployment
 Deployed as a service on IBM cloud foundry </br>
 ELK for log management and seraching</br>
+Availibility Monitoring for availibility</br>
