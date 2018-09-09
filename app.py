@@ -13,6 +13,7 @@ import googlemaps
 
 from achlib.util import logger
 from achlib.util.dbutil import db_fetch, db_insup
+import templates
 
 app = Flask(__name__)
 CORS(app)
@@ -128,6 +129,36 @@ def pickup_item():
             else:
                 upd_qty[res[0]] += int(res[1])
     update_procurement(upd_qty)
+    return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
+
+
+
+@app.route('/compute_resource', methods=['OPTIONS','POST'])
+def compute_resource():
+    ''' Computes required resources based on calamity and required resources'''
+    content = request.json
+    disaster_type = content['disaster_type']
+    category = content['category']
+    population = int(content['population'])
+    items = templates.resource_requirements[disaster_type][category]["items"]
+    recovery_time = templates.resource_requirements[disaster_type][category]["recovery_time"]
+    required_items = {}
+    for item, qty in items.iteritems():
+        required_items[item] = int(population * qty * recovery_time)
+        log.info("required_items: {}".format(required_items[item]))
+    query = "select name, deficit, current_inventory, storage_id from resource where name in ("+str(
+        items.keys())[1:-1:]+") and storage_id = '1'"
+    log.info("compite_resource_query_fetch: {}".format(query))
+    result = db_fetch(query)
+    for row in result:
+        if(required_items[row[0]] < row[2]):
+            query = "update resource set deficit=" + \
+                str(int(row[2]) + required_items[row[0]]) + \
+                " where name='" + row[0] + "';"
+            log.info("compute_resource_query_insup: {}".format(query))
+            db_insup(query)
+    resp = {"msg": "OK"}
+
     return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
 
 
