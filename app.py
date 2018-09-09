@@ -40,9 +40,9 @@ def get_items():
       }
     line_items = dict()
     for res in result:
-        deficit = int(res[4])-int(res[3])
+        deficit = int(res[4])
         if deficit > 0:
-            line_items[res[2]] = int(res[4])-int(res[3])
+            line_items[res[2]] = int(res[4])
     send_data['items'] = line_items
     return Response(json.dumps(send_data), headers=HEADER, status=200, mimetype='application/json')
 
@@ -115,20 +115,32 @@ def driver_see_pickups():
 def pickup_item():
     resp = {"msg": "OK"}
     pickups = request.json
-    print pickups
+    upd_qty = {}
     for key, val in dict(pickups).items():
+        statement = "select resource_id, quantity from procurement where donor_id='{}' and status='N'".format(val)
+        result = db_fetch(statement)
         statement = "update procurement set status='P' where donor_id='{}'".format(val)
         db_insup(statement)
-        statement = "select resource_id, quantity from procurement where donor_id='{}'".format(val)
-        result = db_fetch(statement)
         for res in result:
-            log.info("result fetched in pickup_items: {}".format(res))
-
+            if res[0] not in upd_qty:
+                upd_qty[res[0]] = int(res[1])
+            else:
+                upd_qty[res[0]] += int(res[1])
+    update_procurement(upd_qty)
     return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
 
 
-def update_procurement(doner_id, addr, items):
-    pass
+def update_procurement(upd_qty):
+    log.info("upd_qty = {}".format(upd_qty))
+    for resource_id, qty in upd_qty.items():
+        statement = "select current_inventory, deficit from resource where id='{}'".format(resource_id)
+        res = db_fetch(statement)
+        current_inventory = str(int(res[0][0])+qty)
+        deficit = str(int(res[0][1])-qty)
+        statement = "update resource set current_inventory='{}', deficit='{}' where id='{}'"\
+        .format(current_inventory,deficit,resource_id)
+        log.info("update statement: {}".format(statement))
+        db_insup(statement)
 
 
 def insert_procurement(doner_id, addr, items):
