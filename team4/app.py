@@ -4,6 +4,7 @@ from ConfigParser import SafeConfigParser
 import sys
 import pkg_resources
 from flask import Flask, request, Response
+from flask_cors import CORS
 import pprint
 import json
 
@@ -14,6 +15,7 @@ from achlib.util import logger
 from achlib.util.dbutil import db_fetch, db_insup
 
 app = Flask(__name__)
+CORS(app)
 log = logger.getLogger(__name__)
 config_local = SafeConfigParser()
 config_local.readfp(pkg_resources.resource_stream(__name__, "config-local.ini"))
@@ -46,7 +48,7 @@ def get_items():
 
 
 
-@app.route('/donate_item', methods=['POST'])
+@app.route('/donate_item', methods=['OPTIONS','POST'])
 def donate_item():
     try:
         content = request.json
@@ -70,14 +72,18 @@ def donate_item():
         pass
 
 
-@app.route('/driver_see_item', methods=['POST'])
-def driver_see_item():
+@app.route('/driver_see_pickups', methods=['POST','OPTIONS'])
+def driver_see_pickups():
+    pretty_print_POST(request)
+    if not request.json:
+        return 'OK'
+    print request.json
     driver_addr = request.json['addr']
     geocode_result = gmaps.geocode(driver_addr)[0]['geometry']['location']
     log.info("driver address {}".format(geocode_result))
     lat_bound_low, lat_bound_high = geocode_result['lat'] - 0.05, geocode_result['lat'] + 0.05
     lng_bound_low, lng_bound_high = geocode_result['lng'] - 0.05, geocode_result['lng'] + 0.05
-    statement = "select * from procurement"
+    statement = "select * from procurement where status='N'"
     result = db_fetch(statement)
     counter, resp = 1, {}
     doner_addr = set()
@@ -90,22 +96,35 @@ def driver_see_item():
         log.info("lat: {}, long: {}".format(lat, lng))
         log.info("bounds: {},{},{},{}".format(lat_bound_low, lat_bound_high,lng_bound_low, lng_bound_high))
         if lat_bound_low <= float(lat) <= lat_bound_high and lng_bound_low <= float(lng) <= lng_bound_high:
+            statement = "select name, address, phone from users_hack where id='{}'".format(res[2])
+            doner_info= db_fetch(statement)
             resp['coord_{}'.format(counter)] = {}
             resp['coord_{}'.format(counter)]['d_id'] = res[2]
             resp['coord_{}'.format(counter)]['lat'] = lat
             resp['coord_{}'.format(counter)]['lng'] = lng
-            statement = "select address from users_hack where id='{}'".format(res[2])
-            address = db_fetch(statement)
-            resp['coord_{}'.format(counter)]['addr'] = address[0][0]
+            resp['coord_{}'.format(counter)]['name'] = doner_info[0][0]
+            resp['coord_{}'.format(counter)]['addr'] = doner_info[0][1]
+            resp['coord_{}'.format(counter)]['phone'] = doner_info[0][2]
             counter += 1
 
     return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
 
 
 
-@app.route('/pickup_item', methods=['POST'])
+@app.route('/pickup_item', methods=['OPTIONS','POST'])
 def pickup_item():
-    pass
+    resp = {"msg": "OK"}
+    pickups = request.json
+    print pickups
+    for key, val in dict(pickups).items():
+        statement = "update procurement set status='P' where donor_id='{}'".format(val)
+        db_insup(statement)
+        statement = "select resource_id, quantity from procurement where donor_id='{}'".format(val)
+        result = db_fetch(statement)
+        for res in result:
+            log.info("result fetched in pickup_items: {}".format(res))
+
+    return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
 
 
 def update_procurement(doner_id, addr, items):
