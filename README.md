@@ -44,7 +44,7 @@ Body:</br>
 	"population": "10000"
 }
 
-### Deployment
+### Deployment and monitoring
 Deployed as a service on IBM cloud foundry </br>
 ELK for log management and seraching</br>
-Availibility Monitoring for availibility</br>
+Availibility Monitoring for availibility and alerting</br>
