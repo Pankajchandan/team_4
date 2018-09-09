@@ -151,11 +151,8 @@ def insert_procurement(doner_id, addr, items):
         result = db_fetch(statement)
         if result:
             resource_id = result[0][0]
-            coordinate = ""
-            for key1, val1 in addr.items():
-                coordinate += str(val1)+","
-            coordinate = coordinate[:-1]
-            #print str(resource_id), str(val), coordinate
+            #log.info("addr = {}".format(addr))
+            coordinate = str(addr['lat']) + "," + str(addr['lng'])
             statement = "INSERT INTO public.procurement (resource_id, quantity, donor_id, coordinate, status) \
             VALUES('{}','{}','{}','{}','{}')".format(resource_id,str(val),doner_id, coordinate, 'N')
             log.info("statement to execute: {}".format(statement))
