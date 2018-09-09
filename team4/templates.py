@@ -7,3 +7,9 @@ donate_data = {
                 u"item2": u""
             }
 }
+
+
+driver_addr= {
+            u"addr": u""
+
+}
