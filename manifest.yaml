@@ -1,0 +1,5 @@
+---
+applications:
+ - name: drive4good
+   random-route: true
+   memory: 512M
