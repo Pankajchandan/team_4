@@ -32,16 +32,25 @@ Body:</br>
 POST http://drive4good-surprised-antelope.mybluemix.net/pickup_item
 Body:</br>
 {
-	"pickup_1": "12345"
+	"scheduled_pickups": [
+		{
+			"doner_id":"12345",
+			"scheduled_pickup": "xxxxx"
+		}
+	]
 }
 
 #### compute_resource
 POST http://drive4good-surprised-antelope.mybluemix.net/compute_resource
 Body:</br>
 {
-	"disaster_type": "hurricane",
-	"category": "category 1",
-	"population": "10000"
+	"disasters": [
+		{
+			"disaster_type": "hurricane",
+	        "category": "category 1",
+	        "population": "10000"
+		}
+	]
 }
 
 ### Deployment and monitoring

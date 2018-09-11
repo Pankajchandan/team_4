@@ -37,15 +37,17 @@ def get_items():
     result = db_fetch(statement)
     log.info(result)
     send_data = {
-      u"items": {}
+      u"items": []
       }
-    line_items = dict()
     for res in result:
-        deficit = int(res[4])
-        if deficit > 0:
-            line_items[res[2]] = int(res[4])
-    send_data['items'] = line_items
-    return Response(json.dumps(send_data), headers=HEADER, status=200, mimetype='application/json')
+        line_item = dict()
+        if int(res[4]) > 0: # deficit
+            line_item['item'] = res[2]
+            line_item['qty'] = int(res[4])
+        send_data['items'].append(line_item)
+
+    return Response(json.dumps(send_data), headers=HEADER, status=200, \
+    mimetype='application/json')
 
 
 
@@ -54,8 +56,8 @@ def donate_item():
     try:
         content = request.json
         log.info("item to donate: {}".format(content))
-        statement = "select id, address from users_hack where name='{}'".format(content['d_name'])
-        result = db_fetch(statement)
+        result = db_fetch("select id, address from users_hack where name='{}'"\
+        .format(content['d_name']))
         if result:
             id = result[0][0]
             address = result[0][0]
@@ -63,51 +65,52 @@ def donate_item():
             raise ValueError('No ID found for {}'.format(content['d_name']))
         geocode_result = gmaps.geocode(content['addr'])[0]['geometry']['location']
         insert_procurement(id, geocode_result, content['items'])
-        resp = {u"message": u"Thank you for the good gesture"}
-        return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
+        resp = {u"message": u"Thank you for the good gesture.\nYour request \
+        has been submitted. you will be notified once a pickup is schduled"}
+
+        return Response(json.dumps(resp), headers=HEADER, status=200, \
+        mimetype='application/json')
     except Exception as e:
         resp = {u"message": u"could not make request...{}".format(e)}
         raise
     finally:
-        #return Response(json.dumps(resp), status=500, mimetype='application/json')
         pass
 
 
 @app.route('/driver_see_pickups', methods=['POST','OPTIONS'])
 def driver_see_pickups():
-    #pretty_print_POST(request)
-    if not request.json:
-        return 'OK'
-    print request.json
     driver_addr = request.json['addr']
     geocode_result = gmaps.geocode(driver_addr)[0]['geometry']['location']
     log.info("driver address {}".format(geocode_result))
-    lat_bound_low, lat_bound_high = geocode_result['lat'] - 0.05, geocode_result['lat'] + 0.05
-    lng_bound_low, lng_bound_high = geocode_result['lng'] - 0.05, geocode_result['lng'] + 0.05
-    statement = "select * from procurement where status='N'"
-    result = db_fetch(statement)
-    counter, resp = 1, {}
-    doner_addr = set()
+    lat_bound_low, lat_bound_high = geocode_result['lat']-0.05, geocode_result['lat']+0.05
+    lng_bound_low, lng_bound_high = geocode_result['lng']-0.05, geocode_result['lng']+0.05
+    log.info("radius for driver: {},{},{},{}"\
+    .format(lat_bound_low, lat_bound_high,lng_bound_low, lng_bound_high))
+    result = db_fetch("select * from procurement where status='N'")
+    #doner_addr = set()
+    doner_addr = set([(res[6],res[2]) for res in result])
+    '''
     for res in result:
         doner_addr.add((res[6],res[2]))
-    #log.info("doner_addresses: {}".format(doner_addr))
+    '''
+    resp = {"possible_pickups":[]}
     for add in doner_addr:
         lat = add[0].split(',')[0]
         lng = add[0].split(',')[1]
-        if lat_bound_low <= float(lat) <= lat_bound_high and lng_bound_low <= float(lng) <= lng_bound_high:
+        if lat_bound_low <= float(lat) <= lat_bound_high \
+        and lng_bound_low <= float(lng) <= lng_bound_high:
+            pickup_info = dict()
             log.info("nearby doner lat: {}, long: {}".format(lat, lng))
-            log.info("bounds: {},{},{},{}".format(lat_bound_low, lat_bound_high,lng_bound_low, lng_bound_high))
             statement = "select name, address, phone from users_hack where id='{}'".format(res[2])
             log.info("fetch statement: {}".format(statement))
             doner_info= db_fetch(statement)
-            resp['coord_{}'.format(counter)] = {}
-            resp['coord_{}'.format(counter)]['d_id'] = res[2]
-            resp['coord_{}'.format(counter)]['lat'] = lat
-            resp['coord_{}'.format(counter)]['lng'] = lng
-            resp['coord_{}'.format(counter)]['name'] = doner_info[0][0]
-            resp['coord_{}'.format(counter)]['addr'] = doner_info[0][1]
-            resp['coord_{}'.format(counter)]['phone'] = doner_info[0][2]
-            counter += 1
+            pickup_info['d_id'] = res[2]
+            pickup_info['lat'] = lat
+            pickup_info['lng'] = lng
+            pickup_info['name'] = doner_info[0][0]
+            pickup_info['addr'] = doner_info[0][1]
+            pickup_info['phone'] = doner_info[0][2]
+            resp['possible_pickups'].append(pickup_info)
 
     return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
 
@@ -116,12 +119,15 @@ def driver_see_pickups():
 @app.route('/pickup_item', methods=['OPTIONS','POST'])
 def pickup_item():
     resp = {"msg": "OK"}
-    pickups = request.json
+    contents = request.json
     upd_qty = {}
-    for key, val in dict(pickups).items():
-        statement = "select resource_id, quantity from procurement where donor_id='{}' and status='N'".format(val)
+    for pickup in contents["scheduled_pickups"]:
+        statement = "select resource_id, quantity from procurement \
+        where donor_id='{}' and status='N'".format(pickup["doner_id"])
         result = db_fetch(statement)
-        statement = "update procurement set status='P' where donor_id='{}'".format(val)
+        statement = "update procurement set status='P' where donor_id='{}'"\
+        .format(pickup["doner_id"])
+        ## TODO update pickup schedule in db
         db_insup(statement)
         for res in result:
             if res[0] not in upd_qty:
@@ -135,11 +141,19 @@ def pickup_item():
 
 @app.route('/compute_resource', methods=['OPTIONS','POST'])
 def compute_resource():
-    ''' Computes required resources based on calamity and required resources'''
     content = request.json
-    disaster_type = content['disaster_type']
-    category = content['category']
-    population = int(content['population'])
+    for disaster in content["disasters"]:
+        compute_resource_helper(disaster)
+    resp = {"msg": "OK"}
+
+    return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
+
+
+def compute_resource_helper(disaster):
+    ''' Computes required resources based on calamity and required resources'''
+    disaster_type = disaster['disaster_type']
+    category = disaster['category']
+    population = int(disaster['population'])
     items = templates.resource_requirements[disaster_type][category]["items"]
     recovery_time = templates.resource_requirements[disaster_type][category]["recovery_time"]
     required_items = {}
@@ -157,9 +171,6 @@ def compute_resource():
                 " where name='" + row[0] + "';"
             log.info("compute_resource_query_insup: {}".format(query))
             db_insup(query)
-    resp = {"msg": "OK"}
-
-    return Response(json.dumps(resp), headers=HEADER, status=200, mimetype='application/json')
 
 
 def update_procurement(upd_qty):
